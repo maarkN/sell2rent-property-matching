@@ -56,6 +56,22 @@ export const CountRowSchema = z.object({
 });
 
 /**
+ * The per-city aggregate. BOTH numeric columns arrive as strings.
+ *
+ * `COUNT(*)` is BIGINT and `ROUND(AVG(price), 2)` is NUMERIC, so without the
+ * conversion here the endpoint would answer `"54"` and `"293296.06"` — valid
+ * JSON, wrong types, and a defect no compiler catches because `pool.query<T>()
+ * ` believed the annotation.
+ */
+export const CityInventoryRowSchema = z.object({
+  city: z.string().min(1),
+  property_count: numericFromPg.pipe(z.number().int()),
+  average_price: numericFromPg,
+});
+
+export type CityInventoryRow = z.infer<typeof CityInventoryRowSchema>;
+
+/**
  * Parse rows, failing loudly with the offending index.
  *
  * Deliberately not `safeParse` + skip: a malformed database row is a bug in our

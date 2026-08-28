@@ -1,5 +1,8 @@
 import { ImportPropertiesUseCase } from '@application/usecases/import-properties.usecase';
-import type { PropertyRepository } from '@domain/interfaces/property-repository.interface';
+import type {
+  CityInventory,
+  PropertyRepository,
+} from '@domain/interfaces/property-repository.interface';
 import type { Property } from '@domain/entities/property.entity';
 import { ConfigService } from '@shared/config/config.service';
 import { Logger } from '@shared/utils/logger';
@@ -17,6 +20,29 @@ class InMemoryPropertyRepository implements PropertyRepository {
 
   async count(): Promise<number> {
     return this.saved.length;
+  }
+
+  /**
+   * Part of the contract, unused by import.
+   *
+   * Implemented rather than stubbed with `throw`: a fake that lies about a
+   * method is worse than one that does not have it, and the compiler is the
+   * reason the omission was noticed at all.
+   */
+  async cityInventory(): Promise<CityInventory[]> {
+    const byCity = new Map<string, number[]>();
+    for (const property of this.saved) {
+      byCity.set(property.city, [...(byCity.get(property.city) ?? []), property.price]);
+    }
+
+    return [...byCity.entries()]
+      .map(([city, prices]) => ({
+        city,
+        propertyCount: prices.length,
+        averagePrice:
+          Math.round((prices.reduce((a, b) => a + b, 0) / prices.length) * 100) / 100,
+      }))
+      .sort((left, right) => right.propertyCount - left.propertyCount);
   }
 }
 
