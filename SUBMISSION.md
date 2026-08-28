@@ -8,6 +8,8 @@ https://github.com/maarkN/sell2rent-property-matching
 
 ## Setup Notes
 
+Full instructions, the environment-variable table and the API reference are in [`README.md`](README.md). The original brief is preserved verbatim in [`CHALLENGE.md`](CHALLENGE.md). The short version:
+
 ```bash
 cp .env.example .env
 docker compose up -d      # PostgreSQL 16
