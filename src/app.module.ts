@@ -4,6 +4,10 @@ import { Pool } from 'pg';
 import { ConfigService } from '@shared/config/config.service';
 import { Logger } from '@shared/utils/logger';
 import { DATABASE_POOL, createPool } from '@infrastructure/database/pool';
+import { PROPERTY_REPOSITORY } from '@domain/interfaces/property-repository.interface';
+import { PostgresPropertyRepository } from '@infrastructure/repositories/postgres-property.repository';
+import { ImportPropertiesUseCase } from '@application/usecases/import-properties.usecase';
+import { PropertiesController } from '@interfaces/controllers/properties.controller';
 
 /**
  * THE COMPOSITION ROOT.
@@ -17,7 +21,7 @@ import { DATABASE_POOL, createPool } from '@infrastructure/database/pool';
  * domain declared. `src/domain` imports no framework, no driver, no Zod.
  */
 @Module({
-  controllers: [],
+  controllers: [PropertiesController],
   providers: [
     ConfigService,
     Logger,
@@ -29,6 +33,12 @@ import { DATABASE_POOL, createPool } from '@infrastructure/database/pool';
         createPool(config.env.DATABASE_URL),
       inject: [ConfigService],
     },
+
+    // The binding: ask for the contract, receive the PostgreSQL implementation.
+    // Nothing outside this file names both.
+    { provide: PROPERTY_REPOSITORY, useClass: PostgresPropertyRepository },
+
+    ImportPropertiesUseCase,
   ],
   exports: [ConfigService, Logger, DATABASE_POOL],
 })
