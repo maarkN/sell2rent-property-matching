@@ -38,6 +38,18 @@ export const PropertyRowSchema = z.object({
 
 export type PropertyRow = z.infer<typeof PropertyRowSchema>;
 
+export const InvestorRowSchema = z.object({
+  id: z.number().int(),
+  name: z.string().min(1),
+  min_price: numericFromPg,
+  max_price: numericFromPg,
+  preferred_city: z.string().min(1).nullable(),
+  min_bedrooms: z.number().int(),
+  min_square_feet: z.number().int(),
+});
+
+export type InvestorRow = z.infer<typeof InvestorRowSchema>;
+
 /** `COUNT(*)` returns BIGINT, which `pg` also hands back as a string. */
 export const CountRowSchema = z.object({
   count: numericFromPg.pipe(z.number().int()),
