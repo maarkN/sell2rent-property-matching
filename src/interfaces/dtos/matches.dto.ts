@@ -24,6 +24,14 @@ export const SCORE_DECIMALS = 4;
  * a single request can name a page large enough to pull the entire inventory
  * into memory, undoing the guarantee the spec states as a requirement.
  */
+const pageSizeField = (name: string): z.ZodType<number | undefined> =>
+  z.coerce
+    .number()
+    .int(`${name} must be an integer`)
+    .min(1, `${name} must be at least 1`)
+    .max(MAX_PAGE_SIZE, `${name} must not exceed ${MAX_PAGE_SIZE}`)
+    .optional();
+
 export const MatchesQuerySchema = z
   .object({
     page: z.coerce
@@ -31,17 +39,24 @@ export const MatchesQuerySchema = z
       .int('page must be an integer')
       .min(1, 'page must be at least 1')
       .default(DEFAULT_PAGE),
-    page_size: z.coerce
-      .number()
-      .int('page_size must be an integer')
-      .min(1, 'page_size must be at least 1')
-      .max(MAX_PAGE_SIZE, `page_size must not exceed ${MAX_PAGE_SIZE}`)
-      .default(DEFAULT_PAGE_SIZE),
+
+    // `limit` is the name the brief documents (`?page=1&limit=20`), so it is
+    // the one that has to work. `page_size` is accepted as a synonym because
+    // it reads better in the response, where `meta.page_size` reports it.
+    // Rejecting `limit` — which an earlier revision did, via strict() — turned
+    // the challenge's own example request into a 400.
+    limit: pageSizeField('limit'),
+    page_size: pageSizeField('page_size'),
   })
-  // Rejects unknown keys for the same reason the investor body does: a typo
-  // like `page_siz` would otherwise fall back to the default and be reported
-  // as a successful request for a page the caller never asked for.
-  .strict();
+  // Unknown keys are still rejected: a typo like `page_siz` would otherwise
+  // fall back to the default and be reported as a successful request for a
+  // page the caller never asked for.
+  .strict()
+  .transform((query) => ({
+    page: query.page,
+    // `limit` wins when both are supplied; the brief's spelling is canonical.
+    pageSize: query.limit ?? query.page_size ?? DEFAULT_PAGE_SIZE,
+  }));
 
 export type MatchesQueryDto = z.infer<typeof MatchesQuerySchema>;
 

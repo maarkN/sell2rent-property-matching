@@ -12,6 +12,6 @@
 export interface TopCityResponse {
   readonly city: string;
   readonly property_count: number;
-  readonly average_price: number;
+  readonly avg_price: number;
   readonly total_inventory: number;
 }
