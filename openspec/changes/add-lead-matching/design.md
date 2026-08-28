@@ -81,19 +81,65 @@ The score is ordered at full precision and rounded only when serialised.
 **Rounding must not happen in the projection.** Writing the obvious thing —
 selecting a rounded score under the alias `score` and then ordering by `score` —
 silently sorts by the *rounded* value, because a bare ordering name resolves
-against output aliases before input columns. Two properties differing by 0.004
-then collapse into a tie and are ordered by identifier rather than by fit.
-Verified: rows scoring 95.2312, 95.2349 and 95.2388 come back in the order
-95.2388, 95.2312, 95.2349 under the aliased form.
+against output aliases before input columns. Properties differing beyond the
+rounded precision then collapse into a tie and are ordered by identifier rather
+than by fit.
+
+Reproduced against the seeded database with the brief's sample investor
+(Houston, 150,000–300,000, 3 bedrooms, 1,200 sq ft). Three properties score
+within 0.005 of one another:
+
+| Property | Score | Rounded to 2 |
+|---|---|---|
+| P0187 | 59.38333… | 59.38 |
+| P0363 | 59.38193… | 59.38 |
+| P0029 | 59.37886… | 59.38 |
+
+Ordering by the rounded alias returns **P0029, P0187, P0363** — the worst fit of
+the three placed first, because the scores collapsed to a tie and the
+identifier tie-break then decided the whole group. Ordering before rounding
+returns P0187, P0363, P0029, which is the actual fit order.
+
+That is the failure this decision exists to prevent: it is silent, it produces
+a plausible-looking list, and it inverts precisely the ranking the endpoint is
+for.
 
 Two fixes work; rounding outside SQL is preferred because it makes presentation
 actually presentational. The alternative is to qualify the ordering name so it
 resolves as an expression.
 
-### 4. The result total travels with the page
+### 4. The result total travels with the page, including when the page is empty
 
-The total row count is obtained by a window function in the same statement
-rather than by a second counting query, so pagination costs one round trip.
+The total is obtained in the same statement as the page rather than by a second
+counting query, so pagination costs one round trip.
+
+**A bare `COUNT(*) OVER ()` does not survive the last page.** A window function
+is evaluated per returned row, so a page past the end returns no rows at all —
+and therefore no total. The spec requires that request to answer `200` with the
+total still reflecting the full result set, which that shape cannot do: the
+field would read 0 exactly when the caller most needs it to say how far they
+overshot.
+
+Decision 1 makes the fix available. Because ranking never filters, the result
+set is always the whole inventory, so the total is `COUNT(*)` over `properties`
+and does not depend on the page at all. Computing it as its own row source and
+attaching the page to it keeps one round trip while guaranteeing a row exists:
+
+```sql
+SELECT t.total, p.*
+  FROM (SELECT COUNT(*) AS total FROM properties) t
+  LEFT JOIN LATERAL (
+    -- ranked, ordered, LIMIT/OFFSET page
+  ) p ON TRUE
+```
+
+`LEFT JOIN LATERAL ... ON TRUE` always yields at least one row: on an empty
+page, that row carries the total with null property columns, which the mapping
+reads as an empty page rather than a zero total.
+
+*Alternative considered:* a second `SELECT COUNT(*)` statement. Rejected — it
+costs a second round trip to answer a question the first statement already had
+the information for.
 
 ### 5. No index can serve this query, and that is stated rather than hidden
 
@@ -101,6 +147,77 @@ The query evaluates an expression over every row and orders by a computed
 column: a full scan followed by a sort, by construction. At this row count the
 planner would scan sequentially regardless. The path to scaling is a
 materialised score or a pre-filter, not an index.
+
+### 6. The pagination bounds and the reported precision, stated as numbers
+
+The spec requires "documented defaults" and a "permitted maximum" without
+naming them, and requires the score to be reported "at a stated precision"
+without stating it. Naming them here is what makes those requirements
+verifiable rather than self-referential:
+
+| Parameter | Value |
+|---|---|
+| `page` default | 1 |
+| `page_size` default | 20 |
+| `page_size` maximum | 100 |
+| reported `score` precision | 4 decimal places |
+
+The page size is bounded because it is caller-controlled: without a maximum,
+`page_size=100000` makes a single request materialise the entire inventory and
+quietly undoes the memory guarantee the spec states as a requirement. 100 caps
+a page at roughly a quarter of the 410-row dataset, which is generous for a
+list a person reads and still far from unbounded.
+
+**Four decimal places on the score, not two, and the difference was measured.**
+The proximity bonus divides by half the range width, so scores are repeating
+decimals whose spacing depends on the investor's range rather than on anything
+fixed. Counting distinct scores across the 410 properties at several precisions:
+
+| Investor | Distinct scores | At 4 dp | At 3 dp | At 2 dp | Smallest gap |
+|---|---|---|---|---|---|
+| Brief's sample (Houston, 150–300k) | 189 | 189 | 189 | 182 | 0.00073 |
+| Austin, 200–600k | 328 | 327 | 322 | 268 | 0.000025 |
+| Tampa, 100–250k | 150 | 150 | 150 | 149 | 0.0047 |
+| No city, 300k–1M | 190 | 190 | 185 | 149 | 0.0001 |
+
+Two decimals lose distinctions in *every* profile measured, and up to 41 of 190
+in the worst. Four lose at most one pair. Three sit in between and buy little.
+
+**No fixed precision removes the problem, and that is why the spec allows for
+it.** Price is continuous within the range, so two properties can always sit
+arbitrarily close to the midpoint — the Austin profile already produces a pair
+0.000025 apart. Rounding is therefore a *display* concern with an irreducible
+residual, which is exactly what the spec's "scores may appear equal" scenario
+describes. Decision 3 is what keeps that residual out of the ordering, where it
+would do real damage.
+
+### 7. The matches response is shaped; this does not reintroduce an envelope
+
+The body is:
+
+```json
+{ "data": [ ... ], "meta": { "page": 1, "page_size": 20, "total": 410 } }
+```
+
+This needs saying because `api-error-contract` already requires that success
+responses "carry no envelope", naming "a nested data field" specifically, and
+`add-inventory-analytics` reaffirms the rule. Read carelessly, that requirement
+and this one contradict each other.
+
+They do not. The rule forbids a *shared* envelope imposed uniformly on every
+endpoint — `{ statusCode, message, metadata, data }` wrapped around whatever a
+handler returned, which is what would break `POST /properties/import` and
+`GET /analytics/top-cities`, whose shapes the brief specifies exactly. Here the
+brief specifies no shape at all, and pagination has to report a total
+somewhere: `data` and `meta` are this endpoint's own contract, not a wrapper
+around a different one.
+
+The distinction is: no endpoint's specified shape is ever wrapped, and no
+uniform envelope is applied across endpoints. `GET /investors/:id/matches` is
+the only endpoint in the service with a shape of its own to define.
+
+Each entry in `data` is a property with its `score` attached, rounded per
+Decision 6.
 
 ## Risks / Trade-offs
 

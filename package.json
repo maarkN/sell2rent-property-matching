@@ -9,10 +9,10 @@
     "start": "node dist/main.js",
     "start:dev": "nest start --watch",
     "migrate": "ts-node -r tsconfig-paths/register src/infrastructure/database/migrate.ts",
-    "test": "jest",
+    "test": "npm run test:unit && npm run test:integration",
     "test:unit": "jest --selectProjects unit",
-    "test:integration": "jest --selectProjects integration",
-    "test:cov": "jest --coverage",
+    "test:integration": "jest --selectProjects integration --runInBand",
+    "test:cov": "jest --coverage --runInBand",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

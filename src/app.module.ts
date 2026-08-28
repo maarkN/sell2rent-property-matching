@@ -13,6 +13,8 @@ import { PostgresInvestorRepository } from '@infrastructure/repositories/postgre
 import { CreateInvestorUseCase } from '@application/usecases/create-investor.usecase';
 import { GetInvestorUseCase } from '@application/usecases/get-investor.usecase';
 import { InvestorsController } from '@interfaces/controllers/investors.controller';
+import { GetTopCitiesUseCase } from '@application/usecases/get-top-cities.usecase';
+import { AnalyticsController } from '@interfaces/controllers/analytics.controller';
 
 /**
  * THE COMPOSITION ROOT.
@@ -26,7 +28,7 @@ import { InvestorsController } from '@interfaces/controllers/investors.controlle
  * domain declared. `src/domain` imports no framework, no driver, no Zod.
  */
 @Module({
-  controllers: [PropertiesController, InvestorsController],
+  controllers: [PropertiesController, InvestorsController, AnalyticsController],
   providers: [
     ConfigService,
     Logger,
@@ -47,6 +49,7 @@ import { InvestorsController } from '@interfaces/controllers/investors.controlle
     ImportPropertiesUseCase,
     CreateInvestorUseCase,
     GetInvestorUseCase,
+    GetTopCitiesUseCase,
   ],
   exports: [ConfigService, Logger, DATABASE_POOL],
 })

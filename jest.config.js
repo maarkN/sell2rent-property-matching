@@ -22,6 +22,12 @@ module.exports = {
   projects: [
     { ...base, displayName: 'unit', testMatch: ['<rootDir>/tests/unit/**/*.spec.ts'] },
     {
+      // Integration suites share ONE database and truncate the tables they
+      // assert on, so they must not run in parallel workers: `import` and
+      // `inventory-analytics` both own `properties`, and interleaving them
+      // makes each read the other's half-finished state. Jest has no
+      // per-project `maxWorkers`, so the serialisation lives in the
+      // `test:integration` script as `--runInBand`. Unit tests stay parallel.
       ...base,
       displayName: 'integration',
       testMatch: ['<rootDir>/tests/integration/**/*.spec.ts'],

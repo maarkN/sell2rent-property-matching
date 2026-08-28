@@ -46,19 +46,50 @@ one city's mean is roughly 30% higher because of two planted properties. Those
 records are valid inventory and are included; excluding them would require an
 undocumented rule about what counts as a real listing.
 
-The average is reported at a fixed documented precision as a number, not as
-text. This matters because the driver returns fixed-point aggregates as strings;
-without an explicit conversion the field would silently serialise as `"285430.00"`.
+The average is reported as a number rounded to **two decimal places**, matching
+the `NUMERIC(12, 2)` the prices themselves are stored at: the report is no more
+precise than its inputs, and a currency figure is the one place where two
+decimals need no further justification.
+
+Reporting it as a *number* matters because the driver returns fixed-point
+aggregates as strings; without an explicit conversion the field would silently
+serialise as `"285430.00"`. Rounding in SQL and converting on the way out are
+therefore two separate obligations, and only the second one fails loudly.
 
 ### 3. Ranking is by property count, and ties are left to the datastore
 
-Cities are ordered by property count descending, as the brief specifies. With
-eight cities and distinct counts there is no tie to break, so no secondary
-ordering is imposed.
+Cities are ordered by property count descending, as the brief specifies. No
+secondary ordering is imposed.
 
-*Alternative considered:* adding a secondary alphabetical ordering for
-determinism. Rejected as speculative for a fixed eight-row result; it would be
-warranted if the city set were open-ended.
+**The dataset contains ties, and this is a known limitation rather than an
+absence of one.** Measured over the 410 stored properties, the eight cities do
+not hold eight distinct counts:
+
+| City | Properties |
+|---|---|
+| Fort Worth | 54 |
+| Austin | 54 |
+| Jacksonville | 53 |
+| San Antonio | 52 |
+| Houston | 51 |
+| Dallas | 50 |
+| Tampa | 50 |
+| Orlando | 46 |
+
+Fort Worth and Austin tie at 54, and Dallas and Tampa tie at 50. With ordering
+by count alone, the relative position of each tied pair is whatever the plan
+happens to emit; it is not guaranteed across executions and must not be relied
+upon. Every requirement the brief states still holds — counts are ranked
+descending — but the ordering is *partial*, not total.
+
+This is recorded rather than fixed, deliberately. The tests assert that counts
+are non-increasing and never that a particular tied city comes first, so the
+suite does not encode an order the query does not promise.
+
+*Alternative considered and deferred:* a secondary `city ASC`, making the
+ordering total for the cost of one clause. It is the obvious remedy and the
+first thing to add if reproducible ordering becomes a requirement; it is left
+out here only because the brief specifies ranking by count and nothing else.
 
 ## Risks / Trade-offs
 
@@ -66,8 +97,11 @@ warranted if the city set were open-ended.
   valid inventory. Documented so the figure is not mistaken for a typical price.
 - **`total_inventory` duplicates `property_count`.** → Follows the brief's own
   example; the reasoning is recorded here and surfaced in the submission notes.
-- **No secondary sort.** → Safe for a fixed, small city set; noted as the first
-  thing to add if the data widens.
+- **No secondary sort, and the data does tie.** Two pairs of cities share a
+  count, so the order within each pair is not reproducible. → Accepted for now
+  and documented in Decision 3; the tests assert only that counts are
+  non-increasing, so nothing depends on the unguaranteed order. Adding
+  `city ASC` is the one-line remedy when reproducibility is required.
 
 ## Migration Plan
 

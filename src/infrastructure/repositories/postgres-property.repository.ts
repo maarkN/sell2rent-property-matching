@@ -2,9 +2,16 @@ import { Inject, Injectable } from '@nestjs/common';
 import { Pool } from 'pg';
 
 import type { Property } from '@domain/entities/property.entity';
-import type { PropertyRepository } from '@domain/interfaces/property-repository.interface';
+import type {
+  CityInventory,
+  PropertyRepository,
+} from '@domain/interfaces/property-repository.interface';
 import { DATABASE_POOL } from '@infrastructure/database/pool';
-import { CountRowSchema, parseRows } from '@infrastructure/repositories/row-schemas';
+import {
+  CityInventoryRowSchema,
+  CountRowSchema,
+  parseRows,
+} from '@infrastructure/repositories/row-schemas';
 
 const COLUMNS = 8;
 
@@ -51,5 +58,40 @@ export class PostgresPropertyRepository implements PropertyRepository {
     const { rows } = await this.pool.query('SELECT COUNT(*)::text AS count FROM properties');
     const [parsed] = parseRows(CountRowSchema, rows);
     return parsed?.count ?? 0;
+  }
+
+  async cityInventory(): Promise<CityInventory[]> {
+    // GROUP BY does the work, so the result set is one row per city no matter
+    // how large the inventory grows. Reading the properties and reducing them
+    // in JavaScript would produce the same numbers while transferring every
+    // row — the difference the brief cares about is here, not in the output.
+    //
+    // ROUND to two decimals matches the NUMERIC(12, 2) the prices are stored
+    // at; see design.md Decision 2. Rounding in SQL rather than on the way out
+    // keeps the reported figure and the compared figure identical.
+    //
+    // ORDER BY count alone, as the brief specifies. This ordering is PARTIAL:
+    // Fort Worth and Austin both hold 54 properties, Dallas and Tampa both 50,
+    // and nothing here decides which of a tied pair comes first. Recorded in
+    // design.md Decision 3 rather than silently fixed.
+    //
+    // properties_city_price_idx (city, price) covers this: the one query in
+    // the service an index can actually serve.
+    const { rows } = await this.pool.query(
+      `SELECT city,
+              COUNT(*)             AS property_count,
+              ROUND(AVG(price), 2) AS average_price
+         FROM properties
+        GROUP BY city
+        ORDER BY COUNT(*) DESC`,
+    );
+
+    // COUNT(*) is BIGINT and the rounded average is NUMERIC; both arrive as
+    // strings, and the schema is what turns them back into numbers.
+    return parseRows(CityInventoryRowSchema, rows).map((row) => ({
+      city: row.city,
+      propertyCount: row.property_count,
+      averagePrice: row.average_price,
+    }));
   }
 }
