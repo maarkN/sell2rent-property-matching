@@ -22,3 +22,8 @@ coverage/
 
 # Build info
 *.tsbuildinfo
+
+# Agent tooling (personal, not part of the deliverable)
+.claude/
+.agents/
+.gemini/

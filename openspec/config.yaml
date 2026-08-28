@@ -1,0 +1,116 @@
+schema: spec-driven
+
+context: |
+  Property Lead Matching Engine — Sell2Rent technical challenge.
+  Stack: NestJS (Express adapter), strict TypeScript (strict: true, no
+  implicit any), PostgreSQL, node-postgres (pg) with hand-written SQL,
+  Zod, winston. No ORM.
+
+  ## Non-negotiable challenge constraints
+  - Match scoring MUST be computed in SQL; never load properties into
+    application memory.
+  - Analytics MUST use SQL aggregation; never compute in app code.
+  - Import MUST be idempotent: UNIQUE(external_id) + ON CONFLICT DO NOTHING.
+    Repeated calls never create duplicates.
+  - Malformed feed records: skip with a logged reason and report them in the
+    response `errors` array. Never crash, never discard silently.
+  - Invalid input -> 400. Missing resource -> 404.
+
+  ## Response shapes — do NOT add an envelope
+  Success responses are BARE, exactly as the brief specifies:
+    POST /properties/import    -> { imported, skipped, errors }
+    GET  /analytics/top-cities -> a JSON ARRAY
+  Never wrap responses in { statusCode, message, metadata, data }. Adding an
+  envelope violates the specified shapes, and response-shape consistency is a
+  graded criterion.
+
+  The only fixed shape is the error one, emitted by a single global filter:
+    { "statusCode": number, "error": string, "message": string }
+
+  `GET /investors/:id/matches` has no shape specified by the brief, so it may
+  use { data, meta } for pagination.
+
+  ## Architecture — layer-first clean architecture
+  This mirrors the structure of the reference implementation written by the
+  reviewing engineer. Follow it closely; deviate only where the brief's graded
+  criteria require it, and say so.
+
+  src/
+    main.ts                    bootstrap only
+    app.module.ts              composition root
+    application/usecases/      *.usecase.ts — orchestration
+    domain/
+      entities/                *.entity.ts — rich entities, rules live here
+      interfaces/              *-repository.interface.ts + DI tokens
+      shared/                  Result type
+    infrastructure/
+      database/                pool, migrations/NNN_*.sql
+      repositories/            postgres-*.repository.ts, row schemas
+    interfaces/
+      controllers/             *.controller.ts
+      dtos/                    Zod request schemas
+      filters/                 the single error shape
+      pipes/                   Zod validation bridge
+    shared/
+      config/                  env schema + typed config service
+      utils/                   logger
+  tests/unit/ and tests/integration/ mirror src/
+
+  - domain/ imports NOTHING from other layers: no NestJS, no pg, no Zod.
+  - application/ depends on domain interfaces only, never on a repository
+    implementation.
+  - There is no interfaces/routes/ folder: NestJS derives routing from
+    controller decorators, unlike the Express-based reference.
+  - Path aliases @domain/* @application/* @infrastructure/* @interfaces/*
+    @shared/* are enabled in tsconfig. Jest does not read tsconfig paths, so
+    package.json must restate them under moduleNameMapper.
+
+  - Dependency rule: every arrow points inward, toward domain.
+  - Composition root: app.module.ts is the ONLY file binding a domain token to
+    an infrastructure implementation, via { provide: TOKEN, useClass: Impl }.
+    Tokens are declared in the domain beside the interface they name, because
+    TypeScript interfaces are erased at runtime.
+  - Rich domain entities: business rules live inside entities
+    (e.g. Property.create() validates and returns a Result).
+    Use cases orchestrate; entities decide.
+
+  ## Conventions
+  - File naming follows the reference implementation: *.entity.ts, *.usecase.ts,
+    *-repository.interface.ts, postgres-*.repository.ts, *.controller.ts,
+    *.dto.ts, *.module.ts, *.filter.ts, *.pipe.ts
+  - DI tokens are Symbols declared in the domain beside the interface they
+    name — not bare strings. A duplicate string token silently overwrites the
+    earlier binding instead of failing.
+  - Zod at BOTH trust boundaries: HTTP input AND database rows. pool.query<T>()
+    is an unchecked assertion, not a verification; NUMERIC and BIGINT come back
+    from pg as strings.
+  - Environment variables validated by a Zod schema at boot. Never
+    `process.env.X!` — a non-null assertion is a lie to the compiler.
+  - Error handling lives in ONE global exception filter. Do not repeat
+    try/catch with hand-built error bodies per controller method.
+  - Versioned .sql migrations; every index must be justified in the design.md
+    of the change that introduces it.
+
+  ## Testing
+  - tests/ mirrors src/ (tests/unit, tests/integration) — not colocated.
+  - Unit tests: entities and use cases, no database (pure tests).
+  - Integration tests: real PostgreSQL for the scoring query and analytics
+    aggregation. Postgres-specific SQL must be tested against Postgres, not a
+    substitute dialect.
+
+  ## Process
+  - Improvements identified but deliberately not implemented are registered as
+    proposal-only changes in openspec/changes/ (proposal.md only, no tasks,
+    never applied). Do not implement them unless explicitly asked.
+
+rules:
+  design:
+    - Justify every index, including stating when no index can serve a query.
+    - State the alternatives considered for each decision.
+  tasks:
+    - Order tasks so migrations and domain entities precede HTTP wiring.
+
+operations:
+  apply:
+    guidance:
+      - Never add a response envelope; the brief's bare shapes are the contract.
