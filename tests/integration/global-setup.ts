@@ -1,4 +1,5 @@
 import { Pool } from 'pg';
+import { runMigrations } from '../../src/infrastructure/database/migrate';
 
 const CONNECTION =
   process.env['DATABASE_URL'] ??
@@ -18,6 +19,9 @@ export default async function globalSetup(): Promise<void> {
   const pool = new Pool({ connectionString: CONNECTION, connectionTimeoutMillis: 5_000 });
   try {
     await pool.query('SELECT 1');
+    // Migrate once for the whole run, so each suite starts against the
+    // schema it expects rather than depending on suite ordering.
+    await runMigrations(pool);
   } catch (error) {
     throw new Error(
       `Integration tests need PostgreSQL at ${CONNECTION}.\n` +
