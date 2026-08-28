@@ -1,0 +1,25 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: sell2rent-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: sell2rent
+    ports:
+      # Host port is overridable so the stack does not collide with a
+      # PostgreSQL already running on the machine. Defaults to the
+      # conventional 5432; set DB_PORT in .env to move it.
+      - '${DB_PORT:-5432}:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # The service is only useful once it accepts connections; without this
+      # `docker compose up -d` returns before the database is reachable.
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d sell2rent']
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+volumes:
+  pgdata:
