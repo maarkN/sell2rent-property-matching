@@ -7,7 +7,7 @@ import type { TopCityResponse } from '@interfaces/dtos/top-cities.dto';
 const toResponse = (entry: CityInventory): TopCityResponse => ({
   city: entry.city,
   property_count: entry.propertyCount,
-  average_price: entry.averagePrice,
+  avg_price: entry.averagePrice,
 
   // `total_inventory` is the COUNT of properties held in the city, not their
   // summed value — design.md Decision 1. The brief never defines the field,

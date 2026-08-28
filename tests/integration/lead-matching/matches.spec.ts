@@ -249,6 +249,44 @@ describe('GET /investors/:id/matches', () => {
     expect(result.data).toHaveLength(20);
   });
 
+  it('accepts the query string the brief documents, ?page=1&limit=20', async () => {
+    await importFeed();
+    const investor = await createInvestor();
+
+    // Verbatim from the challenge README. An earlier revision rejected this
+    // with 400, because `strict()` saw `limit` as an unknown key.
+    const response = await request(server())
+      .get(`/investors/${investor}/matches`)
+      .query({ page: 1, limit: 20 });
+
+    expect(response.status).toBe(200);
+    const body = response.body as MatchesResponse;
+    expect(body.data).toHaveLength(20);
+    expect(body.meta).toEqual({ page: 1, page_size: 20, total: 410 });
+  });
+
+  it('treats page_size as a synonym for limit, and prefers limit when both are given', async () => {
+    await importFeed();
+    const investor = await createInvestor();
+
+    const bySize = await matches(investor, { page: 1, page_size: 5 });
+    expect(bySize.data).toHaveLength(5);
+
+    const both = await matches(investor, { page: 1, limit: 3, page_size: 50 });
+    expect(both.data).toHaveLength(3);
+    expect(both.meta.page_size).toBe(3);
+  });
+
+  it('bounds limit by the same maximum as page_size', async () => {
+    const investor = await createInvestor();
+
+    const response = await request(server())
+      .get(`/investors/${investor}/matches`)
+      .query({ limit: 101 });
+
+    expect(response.status).toBe(400);
+  });
+
   it.each([
     ['a page below one', { page: 0 }],
     ['a negative page', { page: -3 }],

@@ -71,8 +71,9 @@ describe('GET /analytics/top-cities', () => {
     expect(text.trimStart().startsWith('[')).toBe(true);
 
     for (const entry of body) {
+      // Field names verbatim from the brief's example shape.
       expect(Object.keys(entry).sort()).toEqual([
-        'average_price',
+        'avg_price',
         'city',
         'property_count',
         'total_inventory',
@@ -106,12 +107,12 @@ describe('GET /analytics/top-cities', () => {
     // `pg` hands NUMERIC back as a string, so without the conversion this
     // field would serialise as "390391.44" — valid JSON, wrong type, and
     // silent. The wire check is the one that actually catches it.
-    expect(text).not.toMatch(/"average_price":\s*"/);
+    expect(text).not.toMatch(/"avg_price":\s*"/);
 
     for (const entry of body) {
-      expect(typeof entry.average_price).toBe('number');
-      expect(Number.isFinite(entry.average_price)).toBe(true);
-      expect(entry.average_price).toBe(Math.round(entry.average_price * 100) / 100);
+      expect(typeof entry.avg_price).toBe('number');
+      expect(Number.isFinite(entry.avg_price)).toBe(true);
+      expect(entry.avg_price).toBe(Math.round(entry.avg_price * 100) / 100);
     }
   });
 
@@ -157,7 +158,7 @@ describe('GET /analytics/top-cities', () => {
       {
         city: 'Galveston',
         property_count: 1,
-        average_price: 437250.55,
+        avg_price: 437250.55,
         total_inventory: 1,
       },
     ]);
@@ -179,7 +180,7 @@ describe('GET /analytics/top-cities', () => {
     const withOutliers = await scalar(
       "SELECT ROUND(AVG(price), 2)::text AS value FROM properties WHERE city = 'Austin'",
     );
-    expect(austin?.average_price).toBe(withOutliers);
+    expect(austin?.avg_price).toBe(withOutliers);
 
     // And they move it materially: excluding them drops the mean by roughly a
     // quarter. The outliers are valid inventory, so this skew is the correct
@@ -188,6 +189,6 @@ describe('GET /analytics/top-cities', () => {
       "SELECT ROUND(AVG(price), 2)::text AS value FROM properties WHERE city = 'Austin' AND price < 2500000",
     );
     expect(withoutOutliers).not.toBeNull();
-    expect(austin?.average_price).toBeGreaterThan(withoutOutliers ?? 0);
+    expect(austin?.avg_price).toBeGreaterThan(withoutOutliers ?? 0);
   });
 });

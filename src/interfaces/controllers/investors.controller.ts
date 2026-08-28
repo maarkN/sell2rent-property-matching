@@ -102,14 +102,11 @@ export class InvestorsController {
     @Param('id') id: string,
     @Query(new ZodValidationPipe(MatchesQuerySchema)) query: MatchesQueryDto,
   ): Promise<MatchesResponse> {
-    const page = await this.getInvestorMatches.execute(InvestorsController.parseId(id), {
-      page: query.page,
-      pageSize: query.page_size,
-    });
+    const page = await this.getInvestorMatches.execute(InvestorsController.parseId(id), query);
 
     return {
       data: page.items.map(toMatchResponse),
-      meta: { page: query.page, page_size: query.page_size, total: page.total },
+      meta: { page: query.page, page_size: query.pageSize, total: page.total },
     };
   }
 }
