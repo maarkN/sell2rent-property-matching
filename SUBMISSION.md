@@ -50,13 +50,13 @@ The alternative reading is preserved as an unimplemented proposal (`add-match-sc
 
 Scoring, ordering and pagination happen in one statement. Only the requested page reaches the application. Four details are load-bearing, and each corresponds to a real record or input in the dataset:
 
-**`city = $1` with a NULL parameter yields NULL, not false**, so the `CASE` falls to `ELSE 0`. This is also why every scoring-relevant column is `NOT NULL` in the schema and why the optional investor minimums default to `0` rather than staying nullable: the score is a sum, and one NULL anywhere in it erases the row's *entire* score instead of costing it points.
+**`city = $1` with a NULL parameter yields NULL, not false**, so the `CASE` falls to `ELSE 0`. This is also why every scoring-relevant column is `NOT NULL` in the schema and why the optional investor minimums default to `0` rather than staying nullable: the score is a sum, and one NULL anywhere in it erases the row's _entire_ score instead of costing it points.
 
 **Every literal in the bonus is cast to `numeric` before dividing.** With integer operands the division truncates, the bonus degenerates to 0 or 5 and never takes an intermediate value — and the query keeps returning plausible-looking scores while doing it. A test asserting 97.5 at quarter-distance is what catches it.
 
 **A zero-width range branch**, or an investor whose minimum equals their maximum divides by zero. **A clamp to [0, 5]**, or the 5,000,000 property scores −288.3 against a 150,000–300,000 range and corrupts the ordering rather than merely trailing.
 
-**Ordering happens at full precision; rounding happens at the HTTP edge.** Writing the obvious thing — selecting a rounded score under the alias `score` and then ordering by `score` — silently sorts by the *rounded* value, because a bare ordering name resolves against output aliases before input columns. Reproduced on the dataset: P0187 (59.38333), P0363 (59.38193) and P0029 (59.37886) all round to 59.38, and the aliased form returns them P0029-first — the worst fit of the three at the top of the list. The failure is silent and produces a plausible result, which is what makes it worth a test.
+**Ordering happens at full precision; rounding happens at the HTTP edge.** Writing the obvious thing — selecting a rounded score under the alias `score` and then ordering by `score` — silently sorts by the _rounded_ value, because a bare ordering name resolves against output aliases before input columns. Reproduced on the dataset: P0187 (59.38333), P0363 (59.38193) and P0029 (59.37886) all round to 59.38, and the aliased form returns them P0029-first — the worst fit of the three at the top of the list. The failure is silent and produces a plausible result, which is what makes it worth a test.
 
 ### 3. Indexing: one index, and an explicit statement that the other query cannot have one
 
@@ -83,7 +83,7 @@ The total is attached to the page with `LEFT JOIN LATERAL ... ON TRUE` rather th
 **Ideas worth taking from `ack-nestjs-boilerplate`**, which solves several of these in production and which I looked at while choosing the architecture here:
 
 - **Cursor-supporting pagination as a first-class service** rather than per-endpoint query parsing — the same reasoning as above, but shared.
-- **Standardised responses with i18n**, so the error contract carries a message *code* the client can switch on rather than an English sentence. The current `{ statusCode, error, message }` is consistent but not localisable.
+- **Standardised responses with i18n**, so the error contract carries a message _code_ the client can switch on rather than an English sentence. The current `{ statusCode, error, message }` is consistent but not localisable.
 - **URL-based API versioning**, which is what makes changing a response shape possible at all once something depends on it.
 - **A repository abstraction over the data layer.** This project already has one, and I would keep it — it is what let the whole matching engine be exercised through an in-memory fake in unit tests while the real ranking runs against Postgres in integration tests.
 - **Health check endpoints and structured observability** (Sentry, request-scoped logging with correlation IDs). This is deferred here as an explicit proposal (`add-observability`) rather than forgotten — the service logs with winston but has no readiness endpoint and no request tracing.
@@ -119,18 +119,20 @@ The total is attached to the page with `LEFT JOIN LATERAL ... ON TRUE` rather th
 
 ## Approximate Time Spent
 
-| Area | Time |
-|---|---|
-| Learning OpenSpec and getting the project's specs right | 2h |
-| Expanding the idea and choosing the architecture (nearly over-engineered it) | 1h |
-| Schema design, migrations and constraints | 1h |
-| Service foundation — config, error contract, validation, DI, logging | 1.5h |
-| Property import and dirty-data handling | 2h |
-| Investor profiles | 1h |
-| Matching engine — scoring SQL, guards, ordering, pagination | 3h |
-| Analytics | 1h |
-| Fixing the API contract deviations against the brief | 0.5h |
-| Documentation — design records, README, `ai.md`, this file | 1.5h |
-| **Total** | **~14.5h** |
+Generated by AI against my commits and harness memory, but fixed by me
+
+| Area                                                                                   | Time    |
+| -------------------------------------------------------------------------------------- | ------- |
+| Learning OpenSpec and getting the project's specs right and testing how the spec works | 3h      |
+| Expanding the idea and choosing the architecture (nearly over-engineered it)           | 1h      |
+| Schema design, migrations and constraints                                              | 1h      |
+| Service foundation — config, error contract, validation, DI, logging                   | 0.5h    |
+| Property import and dirty-data handling                                                | 0.5h    |
+| Investor profiles                                                                      | 0.5h    |
+| Matching engine — scoring SQL, guards, ordering, pagination                            | 0.5h    |
+| Analytics                                                                              | 0.5h    |
+| Fixing the API contract deviations against the brief                                   | 0.5h    |
+| Documentation — design records, README, `ai.md`, this file                             | 0.5h    |
+| **Total**                                                                              | **~8h** |
 
 The two largest line items are the honest ones. The matching engine took longest not because the scoring is complicated — it is a weighted sum — but because nearly every way of writing it in SQL is subtly wrong: truncating integer division, a negative unclamped bonus, a division by zero on a degenerate range, and an `ORDER BY` that silently sorts by a rounded alias. Each failure produces a plausible-looking list. Finding them cost more than writing the query.
