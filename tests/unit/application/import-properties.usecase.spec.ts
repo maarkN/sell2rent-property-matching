@@ -1,7 +1,10 @@
 import { ImportPropertiesUseCase } from '@application/usecases/import-properties.usecase';
 import type {
   CityInventory,
+  MatchCriteria,
+  Pagination,
   PropertyRepository,
+  RankedPage,
 } from '@domain/interfaces/property-repository.interface';
 import type { Property } from '@domain/entities/property.entity';
 import { ConfigService } from '@shared/config/config.service';
@@ -43,6 +46,42 @@ class InMemoryPropertyRepository implements PropertyRepository {
           Math.round((prices.reduce((a, b) => a + b, 0) / prices.length) * 100) / 100,
       }))
       .sort((left, right) => right.propertyCount - left.propertyCount);
+  }
+
+  /** Also unused by import; implemented for the same reason as above. */
+  async rankByFit(criteria: MatchCriteria, page: Pagination): Promise<RankedPage> {
+    const half = (criteria.maxPrice - criteria.minPrice) / 2;
+    const mid = (criteria.minPrice + criteria.maxPrice) / 2;
+
+    const ranked = this.saved
+      .map((property) => {
+        const bonus =
+          half === 0
+            ? property.price === criteria.minPrice
+              ? 5
+              : 0
+            : Math.min(5, Math.max(0, 5 * (1 - Math.abs(property.price - mid) / half)));
+
+        return {
+          property,
+          score:
+            (property.city === criteria.preferredCity ? 40 : 0) +
+            (property.price >= criteria.minPrice && property.price <= criteria.maxPrice
+              ? 30
+              : 0) +
+            (property.bedrooms >= criteria.minBedrooms ? 15 : 0) +
+            (property.squareFeet >= criteria.minSquareFeet ? 10 : 0) +
+            bonus,
+        };
+      })
+      .sort(
+        (left, right) =>
+          right.score - left.score ||
+          left.property.externalId.localeCompare(right.property.externalId),
+      );
+
+    const offset = (page.page - 1) * page.pageSize;
+    return { items: ranked.slice(offset, offset + page.pageSize), total: ranked.length };
   }
 }
 
