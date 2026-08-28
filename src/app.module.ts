@@ -8,6 +8,11 @@ import { PROPERTY_REPOSITORY } from '@domain/interfaces/property-repository.inte
 import { PostgresPropertyRepository } from '@infrastructure/repositories/postgres-property.repository';
 import { ImportPropertiesUseCase } from '@application/usecases/import-properties.usecase';
 import { PropertiesController } from '@interfaces/controllers/properties.controller';
+import { INVESTOR_REPOSITORY } from '@domain/interfaces/investor-repository.interface';
+import { PostgresInvestorRepository } from '@infrastructure/repositories/postgres-investor.repository';
+import { CreateInvestorUseCase } from '@application/usecases/create-investor.usecase';
+import { GetInvestorUseCase } from '@application/usecases/get-investor.usecase';
+import { InvestorsController } from '@interfaces/controllers/investors.controller';
 
 /**
  * THE COMPOSITION ROOT.
@@ -21,7 +26,7 @@ import { PropertiesController } from '@interfaces/controllers/properties.control
  * domain declared. `src/domain` imports no framework, no driver, no Zod.
  */
 @Module({
-  controllers: [PropertiesController],
+  controllers: [PropertiesController, InvestorsController],
   providers: [
     ConfigService,
     Logger,
@@ -37,8 +42,11 @@ import { PropertiesController } from '@interfaces/controllers/properties.control
     // The binding: ask for the contract, receive the PostgreSQL implementation.
     // Nothing outside this file names both.
     { provide: PROPERTY_REPOSITORY, useClass: PostgresPropertyRepository },
+    { provide: INVESTOR_REPOSITORY, useClass: PostgresInvestorRepository },
 
     ImportPropertiesUseCase,
+    CreateInvestorUseCase,
+    GetInvestorUseCase,
   ],
   exports: [ConfigService, Logger, DATABASE_POOL],
 })
