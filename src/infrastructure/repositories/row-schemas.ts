@@ -72,6 +72,30 @@ export const CityInventoryRowSchema = z.object({
 export type CityInventoryRow = z.infer<typeof CityInventoryRowSchema>;
 
 /**
+ * A ranked page row: the total, plus one property, plus its score.
+ *
+ * Every property column is NULLABLE and that is not sloppiness. The ranking
+ * query attaches the page to the total with `LEFT JOIN LATERAL ... ON TRUE`
+ * precisely so a page past the end still returns a row — one carrying the
+ * total with no property on it. Declaring these non-null would make that row,
+ * the correct answer to an overshooting request, throw instead.
+ */
+export const RankedPropertyRowSchema = z.object({
+  total: numericFromPg.pipe(z.number().int()),
+  external_id: z.string().min(1).nullable(),
+  city: z.string().min(1).nullable(),
+  state: z.string().length(2).nullable(),
+  price: numericFromPg.nullable(),
+  bedrooms: z.number().int().nullable(),
+  bathrooms: z.number().int().nullable(),
+  square_feet: z.number().int().nullable(),
+  lot_size: z.number().int().nullable(),
+  score: numericFromPg.nullable(),
+});
+
+export type RankedPropertyRow = z.infer<typeof RankedPropertyRowSchema>;
+
+/**
  * Parse rows, failing loudly with the offending index.
  *
  * Deliberately not `safeParse` + skip: a malformed database row is a bug in our

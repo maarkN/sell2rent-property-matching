@@ -12,6 +12,7 @@ import { INVESTOR_REPOSITORY } from '@domain/interfaces/investor-repository.inte
 import { PostgresInvestorRepository } from '@infrastructure/repositories/postgres-investor.repository';
 import { CreateInvestorUseCase } from '@application/usecases/create-investor.usecase';
 import { GetInvestorUseCase } from '@application/usecases/get-investor.usecase';
+import { GetInvestorMatchesUseCase } from '@application/usecases/get-investor-matches.usecase';
 import { InvestorsController } from '@interfaces/controllers/investors.controller';
 import { GetTopCitiesUseCase } from '@application/usecases/get-top-cities.usecase';
 import { AnalyticsController } from '@interfaces/controllers/analytics.controller';
@@ -49,6 +50,7 @@ import { AnalyticsController } from '@interfaces/controllers/analytics.controlle
     ImportPropertiesUseCase,
     CreateInvestorUseCase,
     GetInvestorUseCase,
+    GetInvestorMatchesUseCase,
     GetTopCitiesUseCase,
   ],
   exports: [ConfigService, Logger, DATABASE_POOL],

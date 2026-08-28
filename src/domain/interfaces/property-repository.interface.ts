@@ -23,6 +23,44 @@ export interface CityInventory {
   readonly averagePrice: number;
 }
 
+/**
+ * The buying criteria a property is scored against.
+ *
+ * Mirrors the investor's criteria rather than taking the entity itself, so the
+ * contract says exactly what ranking reads and nothing else. `preferredCity` is
+ * the only nullable one, because "no preference" differs from any city.
+ */
+export interface MatchCriteria {
+  readonly preferredCity: string | null;
+  readonly minPrice: number;
+  readonly maxPrice: number;
+  readonly minBedrooms: number;
+  readonly minSquareFeet: number;
+}
+
+export interface Pagination {
+  readonly page: number;
+  readonly pageSize: number;
+}
+
+/** A property and the fit score it earned, at full precision. */
+export interface RankedProperty {
+  readonly property: Property;
+  readonly score: number;
+}
+
+/**
+ * One page of ranked properties, with the size of the whole result set.
+ *
+ * `total` is carried alongside the page because a caller cannot otherwise tell
+ * a last page from a page past the end — and it must survive the second case,
+ * where `items` is empty.
+ */
+export interface RankedPage {
+  readonly items: readonly RankedProperty[];
+  readonly total: number;
+}
+
 export interface PropertyRepository {
   /**
    * Insert properties, ignoring any whose external identifier already exists.
@@ -47,4 +85,18 @@ export interface PropertyRepository {
    * position. See design.md Decision 3.
    */
   cityInventory(): Promise<CityInventory[]>;
+
+  /**
+   * Score every stored property against the criteria and return one page in
+   * rank order, best fit first.
+   *
+   * Ranks, it does not filter: the result set is the entire inventory for any
+   * criteria, so `total` never depends on how well anything matched. Scoring,
+   * ordering and pagination all happen in the datastore — only the page
+   * crosses this boundary.
+   *
+   * Scores come back at full precision. Rounding is the caller's business, and
+   * deliberately so: rounding before ordering silently reorders the result.
+   */
+  rankByFit(criteria: MatchCriteria, page: Pagination): Promise<RankedPage>;
 }
